@@ -9,7 +9,6 @@ from auto_subtitle.utils import filename, str2bool, write_srt
 
 
 def flatmap(func, *iterable):
-    print(list(map(func, *iterable)))
     return itertools.chain.from_iterable(map(func, *iterable))
 
 def unfold_videos_in_directory(directory):
@@ -23,8 +22,7 @@ def main():
                         help="paths to video files to transcribe")
     parser.add_argument("--model", default="small",
                         choices=whisper.available_models(), help="name of the Whisper model to use")
-    parser.add_argument("--output_dir", "-o", type=str,
-                        default=".", help="directory to save the outputs. Without this option, the output will be saved in the same directory as the input video files")
+    parser.add_argument("--output_dir", "-o", type=str, help="directory to save the outputs. Without this option, the output will be saved in the same directory as the input video files")
     parser.add_argument("--output_srt", type=str2bool, default=False,
                         help="whether to output the .srt file along with the video files")
     parser.add_argument("--srt_only", type=str2bool, default=False,
@@ -44,8 +42,6 @@ def main():
     srt_only: bool = args.pop("srt_only")
     language: str = args.pop("language")
     video_input_paths: list[str] = args.pop("video")
-    
-    os.makedirs(output_dir, exist_ok=True)
 
     if model_name.endswith(".en"):
         warnings.warn(
@@ -108,11 +104,16 @@ def get_subtitles(audio_paths: list, output_srt: bool, output_dir: str, transcri
     subtitles_path = {}
 
     for path, audio_path in audio_paths.items():
-        srt_path = output_dir if output_srt else os.path.dirname(path)
-        srt_path = os.path.join(srt_path, f"{filename(path)}.srt")
+        srt_dir = (output_dir if output_dir is not None else os.path.dirname(path)) if output_srt else tempfile.gettempdir()
+        os.makedirs(srt_dir, exist_ok=True)
+        srt_path = os.path.join(srt_dir, f"{filename(path)}.srt")
         
         print(
             f"Generating subtitles for {filename(path)}... This might take a while."
+        )
+
+        print(
+            f"Will save subtitles in {srt_path}"
         )
 
         warnings.filterwarnings("ignore")
@@ -121,6 +122,10 @@ def get_subtitles(audio_paths: list, output_srt: bool, output_dir: str, transcri
 
         with open(srt_path, "w", encoding="utf-8") as srt:
             write_srt(result["segments"], file=srt)
+
+        print(
+            f"Saved"
+        )
 
         subtitles_path[path] = srt_path
 
