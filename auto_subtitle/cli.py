@@ -2,9 +2,18 @@ import os
 import ffmpeg
 import whisper
 import argparse
+import itertools
 import warnings
 import tempfile
-from .utils import filename, str2bool, write_srt
+from auto_subtitle.utils import filename, str2bool, write_srt
+
+
+def flatmap(func, *iterable):
+    print(list(map(func, *iterable)))
+    return itertools.chain.from_iterable(map(func, *iterable))
+
+def unfold_videos_in_directory(directory):
+    return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f)) and (f.endswith(".mp4") or f.endswith(".m4v"))]
 
 
 def main():
@@ -15,7 +24,7 @@ def main():
     parser.add_argument("--model", default="small",
                         choices=whisper.available_models(), help="name of the Whisper model to use")
     parser.add_argument("--output_dir", "-o", type=str,
-                        default=".", help="directory to save the outputs")
+                        default=".", help="directory to save the outputs. Without this option, the output will be saved in the same directory as the input video files")
     parser.add_argument("--output_srt", type=str2bool, default=False,
                         help="whether to output the .srt file along with the video files")
     parser.add_argument("--srt_only", type=str2bool, default=False,
@@ -34,6 +43,7 @@ def main():
     output_srt: bool = args.pop("output_srt")
     srt_only: bool = args.pop("srt_only")
     language: str = args.pop("language")
+    video_input_paths: list[str] = args.pop("video")
     
     os.makedirs(output_dir, exist_ok=True)
 
@@ -44,9 +54,15 @@ def main():
     # if translate task used and language argument is set, then use it
     elif language != "auto":
         args["language"] = language
-        
+
+    video_paths = list(flatmap(lambda f: [f] if os.path.isfile(f) else unfold_videos_in_directory(f), video_input_paths))
+
+    transform(model_name, video_paths, output_dir, output_srt, srt_only, args)
+
+
+def transform(model_name: str, video_paths: str, output_dir: str, output_srt: bool, srt_only: bool, args):
     model = whisper.load_model(model_name)
-    audios = get_audio(args.pop("video"))
+    audios = get_audio(video_paths)
     subtitles = get_subtitles(
         audios, output_srt or srt_only, output_dir, lambda audio_path: model.transcribe(audio_path, **args)
     )
@@ -81,7 +97,7 @@ def get_audio(paths):
         ffmpeg.input(path).output(
             output_path,
             acodec="pcm_s16le", ac=1, ar="16k"
-        ).run(quiet=True, overwrite_output=True)
+        ).run(quiet=False, overwrite_output=True)
 
         audio_paths[path] = output_path
 
@@ -92,7 +108,7 @@ def get_subtitles(audio_paths: list, output_srt: bool, output_dir: str, transcri
     subtitles_path = {}
 
     for path, audio_path in audio_paths.items():
-        srt_path = output_dir if output_srt else tempfile.gettempdir()
+        srt_path = output_dir if output_srt else os.path.dirname(path)
         srt_path = os.path.join(srt_path, f"{filename(path)}.srt")
         
         print(

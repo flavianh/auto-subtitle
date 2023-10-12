@@ -39,6 +39,9 @@ Run the following to view all available options:
 
     auto_subtitle --help
 
+Run the following to convert a direcotyr
+    auto_subtitle path/to/dir --srt_only True --model medium
+
 ## License
 
 This script is open-source and licensed under the MIT License. For more details, check the [LICENSE](LICENSE) file.
